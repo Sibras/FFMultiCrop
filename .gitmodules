@@ -1,0 +1,3 @@
+[submodule "FFFrameReader"]
+	path = FFFrameReader
+	url = https://github.com/Sibras/FFFrameReader.git
