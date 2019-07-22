@@ -3,17 +3,18 @@
 #
 cmake_minimum_required (VERSION 3.10.2)
 
+# Use vcpkg if available
+if(DEFINED ENV{VCPKG_ROOT} AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+    file(TO_CMAKE_PATH "$ENV{VCPKG_ROOT}" ENV_VCPKG_ROOT)
+    set(CMAKE_TOOLCHAIN_FILE "${ENV_VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+    CACHE STRING "")
+endif()
+
 project(FfMultiCrop
     VERSION 0.1
     DESCRIPTION "FFmpeg based library for creating multiple cropped encodes of a video source"
     LANGUAGES CXX
 )
-
-# Use vcpkg if available
-if(DEFINED ENV{VCPKG_ROOT} AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-    set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
-    CACHE STRING "")
-endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -25,10 +26,9 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Export all symbols from Windows dlls into corresponding lib file
-if(MSVC)
-    set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
-endif()
+# Setup export symbol properties
+set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+set(CMAKE_VISIBILITY_INLINES_HIDDEN 1)
 
 # Defines the CMAKE_INSTALL_LIBDIR, CMAKE_INSTALL_BINDIR and many other useful macros.
 include(GNUInstallDirs)
@@ -42,13 +42,14 @@ if(MSVC)
     set(CMAKE_DEBUG_POSTFIX "d")
 endif()
 
+set(FFFR_BUILD_SHARED_LIBS OFF CACHE BOOL "Build libraries as shared as opposed to static" FORCE)
 add_subdirectory(FFFrameReader)
 
 # Shared/Dynamic or Static library?
-option(BUILD_SHARED_LIBS "Build libraries as shared as opposed to static" ON)
+option(FFMC_BUILD_SHARED_LIBS "Build libraries as shared as opposed to static" ON)
 
-# Build test related commands?
-option(BUILD_TESTING "Create test programs" OFF)
+# Build test related programs?
+option(FFMC_BUILD_TESTING "Create test programs" OFF)
 
 # Default to a release build if desired configuration is not specified.
 if(NOT CMAKE_CONFIGURATION_TYPES)
@@ -58,8 +59,19 @@ if(NOT CMAKE_CONFIGURATION_TYPES)
     endif()
 endif()
 
+# Detect IPO support
+include(CheckIPOSupported)
+check_ipo_supported(RESULT BUILD_IPO OUTPUT IPO_ERROR)
+
+include(GenerateExportHeader)
+
+set(FFMC_SOURCES_EXPORT
+    ${PROJECT_BINARY_DIR}/ffmulticrop_export.h
+)
+
 set(FFMC_SOURCES
     source/FFMC.cpp
+    ${FFMC_SOURCES_EXPORT}
 )
 
 set(FFMC_HEADERS
@@ -67,7 +79,7 @@ set(FFMC_HEADERS
 )
 
 # Add source to this project's executable.
-if(BUILD_SHARED_LIBS)
+if(FFMC_BUILD_SHARED_LIBS)
     add_library(FfMultiCrop
         SHARED
         ${FFMC_SOURCES}
@@ -88,6 +100,14 @@ set_target_properties(FfMultiCrop PROPERTIES
     PUBLIC_HEADER "${FFMC_HEADERS}"
 )
 
+if(BUILD_IPO)
+set_target_properties(FfMultiCrop PROPERTIES
+    INTERPROCEDURAL_OPTIMIZATION TRUE
+)
+endif()
+
+generate_export_header(FfMultiCrop)
+
 add_dependencies(FfMultiCrop FfFrameReader)
 
 # Enable all compile warnings
@@ -98,38 +118,17 @@ else()
 endif()
 
 # Find the required FFmpeg libraries
-find_path(AVCODEC_INCLUDE_DIR NAMES libavcodec/avcodec.h)
-find_library(AVCODEC_LIBRARY NAMES avcodec)
-
-find_path(AVFORMAT_INCLUDE_DIR NAMES libavformat/avformat.h)
-find_library(AVFORMAT_LIBRARY NAMES avformat)
-
-find_path(AVFILTER_INCLUDE_DIR NAMES libavfilter/avfilter.h)
-find_library(AVFILTER_LIBRARY NAMES avfilter)
-
 find_path(AVUTIL_INCLUDE_DIR NAMES libavutil/avutil.h)
 find_library(AVUTIL_LIBRARY NAMES avutil)
 
-find_library(SWSCALE_LIBRARY NAMES swscale)
-find_library(POSTPROC_LIBRARY NAMES postproc)
-find_library(SWRESAMPLE_LIBRARY NAMES swresample)
-
 target_include_directories(FfMultiCrop PRIVATE
     ${PROJECT_SOURCE_DIR}/include
-    ${AVCODEC_INCLUDE_DIR}
-    ${AVFORMAT_INCLUDE_DIR}
-    ${AVFILTER_INCLUDE_DIR}
     ${AVUTIL_INCLUDE_DIR}
     FfFrameReader/include
+    ${FfFrameReader_BINARY_DIR}
 )
 target_link_libraries(FfMultiCrop
-    PRIVATE ${AVCODEC_LIBRARY}
-    PRIVATE ${AVFORMAT_LIBRARY}
-    PRIVATE ${AVFILTER_LIBRARY}
     PRIVATE ${AVUTIL_LIBRARY}
-    PRIVATE ${SWSCALE_LIBRARY}
-    PRIVATE ${POSTPROC_LIBRARY}
-    PRIVATE ${SWRESAMPLE_LIBRARY}
     PRIVATE FfFrameReader
 )
 
@@ -148,7 +147,7 @@ install(TARGETS FfMultiCrop
 )
 
 # Add tests
-if(BUILD_TESTING)
+if(FFMC_BUILD_TESTING)
     enable_testing()
     find_package(GTest REQUIRED)
     include(GoogleTest)

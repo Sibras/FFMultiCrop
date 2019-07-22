@@ -43,7 +43,7 @@ bool MultiCrop::cropAndEncode(
         encoders.emplace_back(make_shared<Ffr::Encoder>(sourceFile, i.m_resolution.m_width, i.m_resolution.m_height,
             Ffr::getRational(Ffr::StreamUtils::getSampleAspectRatio(stream.get())), stream->getPixelFormat(),
             Ffr::getRational(Ffr::StreamUtils::getFrameRate(stream.get())), stream->getDuration(), options.m_type,
-            options.m_quality, options.m_preset, Ffr::Encoder::ConstructorLock()));
+            options.m_quality, options.m_preset, options.m_gopSize, Ffr::Encoder::ConstructorLock()));
         if (!encoders.back()->isEncoderValid()) {
             return false;
         }
