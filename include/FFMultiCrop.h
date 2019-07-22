@@ -16,6 +16,7 @@
 #pragma once
 
 #include "FFFRTypes.h"
+#include "ffmulticrop_export.h"
 
 #include <string>
 #include <vector>
@@ -39,17 +40,17 @@ struct Crop
 class CropOptions
 {
 public:
-    CropOptions() = default;
+    FFMULTICROP_EXPORT CropOptions() = default;
 
-    ~CropOptions() = default;
+    FFMULTICROP_EXPORT ~CropOptions() = default;
 
-    CropOptions(const CropOptions& other) = default;
+    FFMULTICROP_EXPORT CropOptions(const CropOptions& other) = default;
 
-    CropOptions(CropOptions&& other) = default;
+    FFMULTICROP_EXPORT CropOptions(CropOptions&& other) = default;
 
-    CropOptions& operator=(const CropOptions& other) = default;
+    FFMULTICROP_EXPORT CropOptions& operator=(const CropOptions& other) = default;
 
-    CropOptions& operator=(CropOptions&& other) = default;
+    FFMULTICROP_EXPORT CropOptions& operator=(CropOptions&& other) = default;
 
     std::vector<Crop> m_cropList;     /**< List of crops for each frame in video */
     Resolution m_resolution = {0, 0}; /**< The resolution of the output video (affects crop size) */
@@ -66,7 +67,7 @@ public:
      * @param options    (Optional) Options to control the out encode.
      * @returns True if it succeeds, false if it fails.
      */
-    static bool cropAndEncode(const std::string& sourceFile, const std::vector<CropOptions>& cropList,
-        const EncoderOptions& options = EncoderOptions());
+    FFMULTICROP_EXPORT static bool cropAndEncode(const std::string& sourceFile,
+        const std::vector<CropOptions>& cropList, const EncoderOptions& options = EncoderOptions());
 };
 } // namespace Fmc

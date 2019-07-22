@@ -123,6 +123,7 @@ find_library(AVUTIL_LIBRARY NAMES avutil)
 
 target_include_directories(FfMultiCrop PRIVATE
     ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_BINARY_DIR}
     ${AVUTIL_INCLUDE_DIR}
     FfFrameReader/include
     ${FfFrameReader_BINARY_DIR}
@@ -162,6 +163,8 @@ if(FFMC_BUILD_TESTING)
         ${PROJECT_SOURCE_DIR}/include
         FfFrameReader/include
         FfFrameReader/test
+        ${FfFrameReader_BINARY_DIR}
+        ${PROJECT_BINARY_DIR}
     )
 
     target_link_libraries(
@@ -175,7 +178,12 @@ if(FFMC_BUILD_TESTING)
     set_target_properties(
         FFMCTest PROPERTIES
         EXCLUDE_FROM_ALL true
+        VS_DEBUGGER_WORKING_DIRECTORY "${FfFrameReader_SOURCE_DIR}/test"
     )
 
     add_dependencies(FFMCTest FfMultiCrop)
+
+    gtest_discover_tests(FFMCTest
+        WORKING_DIRECTORY "${FfFrameReader_SOURCE_DIR}/test"
+    )
 endif()
