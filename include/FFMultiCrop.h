@@ -52,6 +52,13 @@ public:
 
     FFMULTICROP_EXPORT CropOptions& operator=(CropOptions&& other) = default;
 
+    /**
+     * Gets a crop value.
+     * @param frame The frame index of the value to get.
+     * @returns The crop, {UINT32_MAX, UINT32_MAX} if frame is invalid.
+     */
+    FFMULTICROP_EXPORT Crop getCrop(uint32_t frame) const noexcept;
+
     std::vector<Crop> m_cropList;     /**< List of crops for each frame in video */
     Resolution m_resolution = {0, 0}; /**< The resolution of the output video (affects crop size) */
     std::string m_fileName;           /**< Filename of the output file */
