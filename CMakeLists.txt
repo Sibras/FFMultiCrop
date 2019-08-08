@@ -66,7 +66,7 @@ check_ipo_supported(RESULT BUILD_IPO OUTPUT IPO_ERROR)
 include(GenerateExportHeader)
 
 set(FFMC_SOURCES_EXPORT
-    ${PROJECT_BINARY_DIR}/ffmulticrop_export.h
+    ${PROJECT_BINARY_DIR}/FFMCExports.h
 )
 
 set(FFMC_SOURCES
@@ -106,7 +106,9 @@ set_target_properties(FfMultiCrop PROPERTIES
 )
 endif()
 
-generate_export_header(FfMultiCrop)
+generate_export_header(FfMultiCrop
+    EXPORT_FILE_NAME ${FFMC_SOURCES_EXPORT}
+)
 
 add_dependencies(FfMultiCrop FfFrameReader)
 

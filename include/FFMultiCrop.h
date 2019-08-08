@@ -16,7 +16,7 @@
 #pragma once
 
 #include "FFFRTypes.h"
-#include "ffmulticrop_export.h"
+#include "FFMCExports.h"
 
 #include <string>
 #include <vector>
