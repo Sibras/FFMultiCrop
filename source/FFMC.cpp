@@ -29,10 +29,20 @@ extern "C" {
 using namespace std;
 
 namespace Fmc {
-Crop CropOptions::getCrop(const uint32_t frame) const noexcept
+Crop CropOptions::getCrop(const uint64_t frame) const noexcept
 {
-    if (frame < m_cropList.size()) {
-        return m_cropList[frame];
+    if (frame < static_cast<uint64_t>(m_cropList.size())) {
+        // Check if frame is in skip region
+        bool skip = false;
+        for (const auto& i : m_skipRegions) {
+            if (frame >= i.first && frame < i.second) {
+                skip = true;
+                break;
+            }
+        }
+        if (!skip) {
+            return m_cropList[frame];
+        }
     }
     return {UINT32_MAX, UINT32_MAX};
 }
@@ -58,7 +68,29 @@ bool MultiCrop::cropAndEncode(
             Ffr::log("Crop list contains more frames than are found in input stream"s, Ffr::LogLevel::Error);
             return false;
         }
+        size_t skipFrames = 0;
+        for (const auto& j : i.m_skipRegions) {
+            if (j.second < j.first) {
+                Ffr::log("Crop list contains invalid skip region ("s += to_string(j.first) += ", "s +=
+                    to_string(j.second) += ")."s,
+                    Ffr::LogLevel::Error);
+                return false;
+            }
+            if (j.second > static_cast<uint64_t>(stream->getTotalFrames()) ||
+                j.first > static_cast<uint64_t>(stream->getTotalFrames())) {
+                Ffr::log("Crop list contains skip regions greater than total video size. Region will be ignored ("s +=
+                    to_string(j.first) += ", "s += to_string(j.second) += ")."s,
+                    Ffr::LogLevel::Warning);
+            }
+            skipFrames += j.second - j.first;
+        }
+        if (skipFrames + i.m_cropList.size() > static_cast<size_t>(stream->getTotalFrames())) {
+            Ffr::log(
+                "Crop list size combined with skip regions is greater than input stream. Crops greater than file length will be ignored."s,
+                Ffr::LogLevel::Warning);
+        }
         // Create the new encoder
+        // TODO: option for number of threads. split total available by number of encoders.
         encoders.emplace_back(make_shared<Ffr::Encoder>(i.m_fileName, i.m_resolution.m_width, i.m_resolution.m_height,
             Ffr::getRational(Ffr::StreamUtils::getSampleAspectRatio(stream.get())), stream->getPixelFormat(),
             Ffr::getRational(Ffr::StreamUtils::getFrameRate(stream.get())), stream->frameToTime(i.m_cropList.size()),
@@ -87,7 +119,7 @@ bool MultiCrop::cropAndEncode(
         // Send decoded frame to the encoder(s)
         uint32_t current = 0;
         for (auto& i : encoders) {
-            const auto crop = cropList[current].getCrop(static_cast<uint32_t>(frame->getFrameNumber()));
+            const auto crop = cropList[current].getCrop(static_cast<uint64_t>(frame->getFrameNumber()));
             if (crop.m_top != UINT32_MAX || crop.m_left != UINT32_MAX) {
                 // Duplicate frame
                 Ffr::FramePtr copyFrame(av_frame_clone(frame->m_frame.m_frame));

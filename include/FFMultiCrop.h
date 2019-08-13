@@ -57,18 +57,20 @@ public:
      * @param frame The frame index of the value to get.
      * @returns The crop, {UINT32_MAX, UINT32_MAX} if frame is invalid.
      */
-    FFMULTICROP_EXPORT Crop getCrop(uint32_t frame) const noexcept;
+    FFMULTICROP_EXPORT Crop getCrop(uint64_t frame) const noexcept;
 
     std::vector<Crop> m_cropList;     /**< List of crops for each frame in video */
     Resolution m_resolution = {0, 0}; /**< The resolution of the output video (affects crop size) */
     std::string m_fileName;           /**< Filename of the output file */
+    std::vector<std::pair<uint64_t, uint64_t>> m_skipRegions; /**< A list of frame ranges to skip during encoding. The
+                                                               list elements takes the form [startFrame, endFrame) */
 };
 
 class MultiCrop
 {
 public:
     /**
-     * Crops and encodes and input video into 1 or more output videos
+     * Crops and encodes an input video into 1 or more output videos
      * @param sourceFile Source video.
      * @param cropList   List of crop options for each desired output video.
      * @param options    (Optional) Options to control the out encode.
