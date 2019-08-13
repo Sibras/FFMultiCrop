@@ -21,6 +21,7 @@
 #include "FFMultiCrop.h"
 
 #include <algorithm>
+#include <utility>
 
 extern "C" {
 #include <libavutil/frame.h>
@@ -29,6 +30,185 @@ extern "C" {
 using namespace std;
 
 namespace Fmc {
+class MultiCrop
+{
+public:
+    std::shared_ptr<Ffr::Stream> m_stream;
+    std::vector<std::shared_ptr<Ffr::Encoder>> m_encoders;
+    std::vector<CropOptions> m_cropList;
+    int64_t m_currentFrame = 0;
+    int64_t m_lastFrame;
+
+    /**
+     * Multi crop
+     * @param [in,out] stream    The input stream.
+     * @param [in,out] encoders  The configured output encoders.
+     * @param          cropList  List of crop options for each desired output video.
+     * @param          lastFrame The last frame required by all output encoders.
+     */
+    FFFRAMEREADER_NO_EXPORT MultiCrop(std::shared_ptr<Ffr::Stream>& stream,
+        std::vector<std::shared_ptr<Ffr::Encoder>>& encoders, std::vector<CropOptions> cropList,
+        const int64_t lastFrame) noexcept
+        : m_stream(move(stream))
+        , m_encoders(move(encoders))
+        , m_cropList(move(cropList))
+        , m_lastFrame(lastFrame)
+    {}
+
+    FFFRAMEREADER_NO_EXPORT static std::shared_ptr<MultiCrop> getMultiCrop(const std::string& sourceFile,
+        const std::vector<CropOptions>& cropList, const EncoderOptions& options = EncoderOptions()) noexcept
+    {
+        // Try and open source video
+        auto stream = Ffr::Stream::getStream(sourceFile);
+        if (stream == nullptr) {
+            return nullptr;
+        }
+
+        // Create output encoders for each crop sequence
+        int64_t longestFrames = 0;
+        vector<shared_ptr<Ffr::Encoder>> encoders;
+        for (const auto& i : cropList) {
+            // Validate the input crop sequence
+            if (i.m_resolution.m_height > stream->getHeight() || i.m_resolution.m_width > stream->getWidth()) {
+                Ffr::log("Required output resolution is greater than input stream"s, Ffr::LogLevel::Error);
+                return nullptr;
+            }
+            if (i.m_cropList.size() > static_cast<size_t>(stream->getTotalFrames())) {
+                Ffr::log("Crop list contains more frames than are found in input stream"s, Ffr::LogLevel::Error);
+                return nullptr;
+            }
+            size_t skipFrames = 0;
+            for (const auto& j : i.m_skipRegions) {
+                if (j.second < j.first) {
+                    Ffr::log("Crop list contains invalid skip region ("s += to_string(j.first) += ", "s +=
+                        to_string(j.second) += ")."s,
+                        Ffr::LogLevel::Error);
+                    return nullptr;
+                }
+                if (j.second > static_cast<uint64_t>(stream->getTotalFrames()) ||
+                    j.first > static_cast<uint64_t>(stream->getTotalFrames())) {
+                    Ffr::log(
+                        "Crop list contains skip regions greater than total video size. Region will be ignored ("s +=
+                        to_string(j.first) += ", "s += to_string(j.second) += ")."s,
+                        Ffr::LogLevel::Warning);
+                }
+                skipFrames += j.second - j.first;
+            }
+            int64_t totalFrames = skipFrames + i.m_cropList.size();
+            if (totalFrames > stream->getTotalFrames()) {
+                Ffr::log(
+                    "Crop list size combined with skip regions is greater than input stream. Crops greater than file length will be ignored."s,
+                    Ffr::LogLevel::Warning);
+                totalFrames = stream->getTotalFrames();
+            }
+            longestFrames = std::max(longestFrames, totalFrames);
+            // Create the new encoder
+            // TODO: option for number of threads. split total available by number of encoders.
+            encoders.emplace_back(make_shared<Ffr::Encoder>(i.m_fileName, i.m_resolution.m_width,
+                i.m_resolution.m_height, Ffr::getRational(Ffr::StreamUtils::getSampleAspectRatio(stream.get())),
+                stream->getPixelFormat(), Ffr::getRational(Ffr::StreamUtils::getFrameRate(stream.get())),
+                stream->frameToTime(i.m_cropList.size()), options.m_type, options.m_quality, options.m_preset,
+                options.m_gopSize, Ffr::Encoder::ConstructorLock()));
+            if (!encoders.back()->isEncoderValid()) {
+                return nullptr;
+            }
+        }
+
+        // Create object
+        return make_shared<MultiCrop>(stream, encoders, cropList, longestFrames);
+    }
+
+    FFFRAMEREADER_NO_EXPORT bool encodeLoop() noexcept
+    {
+        // Loop through each frame and apply crop values
+        while (true) {
+            // Check if already received all required frames
+            if (m_currentFrame >= m_lastFrame) {
+                // Send flush frame
+                for (auto& i : m_encoders) {
+                    if (!i->encodeFrame(nullptr)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            // Get next frame
+            auto frame = m_stream->getNextFrame();
+            if (frame == nullptr) {
+                if (!m_stream->isEndOfFile()) {
+                    return false;
+                }
+                // Send flush frame
+                for (auto& i : m_encoders) {
+                    if (!i->encodeFrame(nullptr)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            ++m_currentFrame;
+            // Send decoded frame to the encoder(s)
+            uint32_t current = 0;
+            for (auto& i : m_encoders) {
+                const auto crop = m_cropList[current].getCrop(static_cast<uint64_t>(frame->getFrameNumber()));
+                if (crop.m_top != UINT32_MAX || crop.m_left != UINT32_MAX) {
+                    // Duplicate frame
+                    Ffr::FramePtr copyFrame(av_frame_clone(frame->m_frame.m_frame));
+                    if (copyFrame.m_frame == nullptr) {
+                        Ffr::log("Failed to copy frame", Ffr::LogLevel::Error);
+                        return false;
+                    }
+                    auto newFrame = make_shared<Ffr::Frame>(copyFrame, frame->m_timeStamp, frame->m_frameNum,
+                        frame->m_formatContext, frame->m_codecContext);
+
+                    // Correct out of range crop values
+                    auto cropTop =
+                        std::min(crop.m_top, m_stream->getHeight() - m_cropList[current].m_resolution.m_height);
+                    auto cropLeft =
+                        std::min(crop.m_left, m_stream->getWidth() - m_cropList[current].m_resolution.m_width);
+                    auto cropBottom = m_cropList[current].m_resolution.m_height + cropTop;
+                    if (cropBottom > m_stream->getHeight()) {
+                        cropTop -= cropBottom - m_stream->getHeight();
+                        cropBottom = 0;
+                    } else {
+                        cropBottom = m_stream->getHeight() - cropBottom;
+                    }
+                    auto cropRight = m_cropList[current].m_resolution.m_width + cropLeft;
+                    if (cropRight > m_stream->getWidth()) {
+                        cropLeft -= cropRight - m_stream->getWidth();
+                        cropRight = 0;
+                    } else {
+                        cropRight = m_stream->getWidth() - cropRight;
+                    }
+                    if (cropTop != crop.m_left || cropLeft != crop.m_left) {
+                        Ffr::log("Out of range crop values detected, crop has been clamped for frame: "s +
+                                to_string(current),
+                            Ffr::LogLevel::Warning);
+                    }
+
+                    // Apply crop settings
+                    newFrame->m_frame->crop_top = cropTop;
+                    newFrame->m_frame->crop_bottom = cropBottom;
+                    newFrame->m_frame->crop_left = cropLeft;
+                    newFrame->m_frame->crop_right = cropRight;
+
+                    // Encode new frame
+                    if (!i->encodeFrame(newFrame)) {
+                        return false;
+                    }
+                }
+
+                ++current;
+            }
+        }
+    }
+
+    FFFRAMEREADER_NO_EXPORT float getProgress() const
+    {
+        return static_cast<float>(m_currentFrame) / static_cast<float>(m_lastFrame);
+    }
+};
+
 Crop CropOptions::getCrop(const uint64_t frame) const noexcept
 {
     if (frame < static_cast<uint64_t>(m_cropList.size())) {
@@ -47,126 +227,62 @@ Crop CropOptions::getCrop(const uint64_t frame) const noexcept
     return {UINT32_MAX, UINT32_MAX};
 }
 
-bool MultiCrop::cropAndEncode(
-    const std::string& sourceFile, const std::vector<CropOptions>& cropList, const EncoderOptions& options)
+bool cropAndEncode(
+    const string& sourceFile, const vector<CropOptions>& cropList, const EncoderOptions& options) noexcept
 {
-    // Try and open source video
-    const auto stream = Ffr::Stream::getStream(sourceFile);
-    if (stream == nullptr) {
+    const auto multiCrop(MultiCrop::getMultiCrop(sourceFile, cropList, options));
+    if (multiCrop == nullptr) {
         return false;
     }
+    return multiCrop->encodeLoop();
+}
 
-    // Create output encoders for each crop sequence
-    vector<shared_ptr<Ffr::Encoder>> encoders;
-    for (const auto& i : cropList) {
-        // Validate the input crop sequence
-        if (i.m_resolution.m_height > stream->getHeight() || i.m_resolution.m_width > stream->getWidth()) {
-            Ffr::log("Required output resolution is greater than input stream"s, Ffr::LogLevel::Error);
-            return false;
-        }
-        if (i.m_cropList.size() > static_cast<size_t>(stream->getTotalFrames())) {
-            Ffr::log("Crop list contains more frames than are found in input stream"s, Ffr::LogLevel::Error);
-            return false;
-        }
-        size_t skipFrames = 0;
-        for (const auto& j : i.m_skipRegions) {
-            if (j.second < j.first) {
-                Ffr::log("Crop list contains invalid skip region ("s += to_string(j.first) += ", "s +=
-                    to_string(j.second) += ")."s,
-                    Ffr::LogLevel::Error);
-                return false;
-            }
-            if (j.second > static_cast<uint64_t>(stream->getTotalFrames()) ||
-                j.first > static_cast<uint64_t>(stream->getTotalFrames())) {
-                Ffr::log("Crop list contains skip regions greater than total video size. Region will be ignored ("s +=
-                    to_string(j.first) += ", "s += to_string(j.second) += ")."s,
-                    Ffr::LogLevel::Warning);
-            }
-            skipFrames += j.second - j.first;
-        }
-        if (skipFrames + i.m_cropList.size() > static_cast<size_t>(stream->getTotalFrames())) {
-            Ffr::log(
-                "Crop list size combined with skip regions is greater than input stream. Crops greater than file length will be ignored."s,
-                Ffr::LogLevel::Warning);
-        }
-        // Create the new encoder
-        // TODO: option for number of threads. split total available by number of encoders.
-        encoders.emplace_back(make_shared<Ffr::Encoder>(i.m_fileName, i.m_resolution.m_width, i.m_resolution.m_height,
-            Ffr::getRational(Ffr::StreamUtils::getSampleAspectRatio(stream.get())), stream->getPixelFormat(),
-            Ffr::getRational(Ffr::StreamUtils::getFrameRate(stream.get())), stream->frameToTime(i.m_cropList.size()),
-            options.m_type, options.m_quality, options.m_preset, options.m_gopSize, Ffr::Encoder::ConstructorLock()));
-        if (!encoders.back()->isEncoderValid()) {
-            return false;
+MultiCropServer::~MultiCropServer()
+{
+    if (m_future.valid()) {
+        m_future.wait();
+    }
+}
+
+MultiCropServer::MultiCropServer(
+    std::shared_ptr<MultiCrop>& multiCrop, std::future<bool>& future, ConstructorLock) noexcept
+    : m_multiCrop(move(multiCrop))
+    , m_future(move(future))
+{}
+
+MultiCropServer::Status MultiCropServer::getStatus() noexcept
+{
+    if (m_status == Status::Running) {
+        // Check for updates status
+        if (m_future.wait_for(chrono::seconds(0)) == future_status::ready) {
+            m_status = m_future.get() ? Status::Completed : Status::Failed;
         }
     }
+    return m_status;
+}
 
-    // Loop through each frame and apply crop values
-    while (true) {
-        // Get next frame
-        auto frame = stream->getNextFrame();
-        if (frame == nullptr) {
-            if (!stream->isEndOfFile()) {
-                return false;
-            }
-            // Send flush frame
-            for (auto& i : encoders) {
-                if (!i->encodeFrame(nullptr)) {
-                    return false;
-                }
-            }
-            return true;
-        }
-        // Send decoded frame to the encoder(s)
-        uint32_t current = 0;
-        for (auto& i : encoders) {
-            const auto crop = cropList[current].getCrop(static_cast<uint64_t>(frame->getFrameNumber()));
-            if (crop.m_top != UINT32_MAX || crop.m_left != UINT32_MAX) {
-                // Duplicate frame
-                Ffr::FramePtr copyFrame(av_frame_clone(frame->m_frame.m_frame));
-                if (copyFrame.m_frame == nullptr) {
-                    Ffr::log("Failed to copy frame", Ffr::LogLevel::Error);
-                    return false;
-                }
-                auto newFrame = make_shared<Ffr::Frame>(
-                    copyFrame, frame->m_timeStamp, frame->m_frameNum, frame->m_formatContext, frame->m_codecContext);
-
-                // Correct out of range crop values
-                auto cropTop = std::min(crop.m_top, stream->getHeight() - cropList[current].m_resolution.m_height);
-                auto cropLeft = std::min(crop.m_left, stream->getWidth() - cropList[current].m_resolution.m_width);
-                auto cropBottom = cropList[current].m_resolution.m_height + cropTop;
-                if (cropBottom > stream->getHeight()) {
-                    cropTop -= cropBottom - stream->getHeight();
-                    cropBottom = 0;
-                } else {
-                    cropBottom = stream->getHeight() - cropBottom;
-                }
-                auto cropRight = cropList[current].m_resolution.m_width + cropLeft;
-                if (cropRight > stream->getWidth()) {
-                    cropLeft -= cropRight - stream->getWidth();
-                    cropRight = 0;
-                } else {
-                    cropRight = stream->getWidth() - cropRight;
-                }
-                if (cropTop != crop.m_left || cropLeft != crop.m_left) {
-                    Ffr::log(
-                        "Out of range crop values detected, crop has been clamped for frame: "s + to_string(current),
-                        Ffr::LogLevel::Warning);
-                }
-
-                // Apply crop settings
-                newFrame->m_frame->crop_top = cropTop;
-                newFrame->m_frame->crop_bottom = cropBottom;
-                newFrame->m_frame->crop_left = cropLeft;
-                newFrame->m_frame->crop_right = cropRight;
-
-                // Encode new frame
-                if (!i->encodeFrame(newFrame)) {
-                    return false;
-                }
-            }
-
-            ++current;
-        }
+float MultiCropServer::getProgress() noexcept
+{
+    if (getStatus() == Status::Completed) {
+        return 1.0f;
     }
+    if (getStatus() == Status::Failed) {
+        return 0.0f;
+    }
+    return m_multiCrop->getProgress();
+}
+
+std::shared_ptr<MultiCropServer> cropAndEncodeAsync(
+    const std::string& sourceFile, const std::vector<CropOptions>& cropList, const EncoderOptions& options) noexcept
+{
+    auto multiCrop(MultiCrop::getMultiCrop(sourceFile, cropList, options));
+    if (multiCrop == nullptr) {
+        return nullptr;
+    }
+    auto future(async(launch::async, &MultiCrop::encodeLoop, multiCrop));
+    if (!future.valid()) {
+        return nullptr;
+    }
+    return make_shared<MultiCropServer>(multiCrop, future, MultiCropServer::ConstructorLock());
 }
 } // namespace Fmc

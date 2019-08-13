@@ -71,7 +71,38 @@ protected:
 TEST_P(EncodeTest1, encodeStream)
 {
     // Just run an encode and see if output is correct manually
-    ASSERT_TRUE(MultiCrop::cropAndEncode(g_testData[GetParam().m_testDataIndex].m_fileName, m_cropOps));
+    ASSERT_TRUE(cropAndEncode(g_testData[GetParam().m_testDataIndex].m_fileName, m_cropOps));
+
+    // Check that we can open encoded file and its parameters are correct
+    for (const auto& i : m_cropOps) {
+        auto stream = Ffr::Stream::getStream(i.m_fileName);
+        ASSERT_NE(stream, nullptr);
+
+        ASSERT_EQ(stream->getWidth(), i.m_resolution.m_width);
+        ASSERT_EQ(stream->getHeight(), i.m_resolution.m_height);
+        ASSERT_EQ(stream->getTotalFrames(), i.m_cropList.size());
+        ASSERT_DOUBLE_EQ(stream->getFrameRate(), g_testData[GetParam().m_testDataIndex].m_frameRate);
+    }
+}
+
+TEST_P(EncodeTest1, encodeStreamAsync)
+{
+    // Use different output name for this test
+    for (auto& i : m_cropOps) {
+        i.m_fileName = "async-" + i.m_fileName;
+    }
+
+    // Just run an encode and see if output is correct manually
+    auto server = cropAndEncodeAsync(g_testData[GetParam().m_testDataIndex].m_fileName, m_cropOps);
+    ASSERT_NE(server, nullptr);
+
+    // Wait for encode to finish
+    while (server->getStatus() == MultiCropServer::Status::Running) {
+        ASSERT_GE(server->getProgress(), 0.0f);
+        ASSERT_LE(server->getProgress(), 1.0f);
+    }
+    ASSERT_EQ(server->getStatus(), MultiCropServer::Status::Completed);
+    ASSERT_FLOAT_EQ(server->getProgress(), 1.0f);
 
     // Check that we can open encoded file and its parameters are correct
     for (const auto& i : m_cropOps) {

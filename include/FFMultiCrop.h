@@ -18,6 +18,7 @@
 #include "FFFRTypes.h"
 #include "FFMCExports.h"
 
+#include <future>
 #include <string>
 #include <vector>
 
@@ -66,17 +67,73 @@ public:
                                                                list elements takes the form [startFrame, endFrame) */
 };
 
-class MultiCrop
+/**
+ * Crops and encodes an input video into 1 or more output videos synchronously.
+ * @param sourceFile Source video.
+ * @param cropList   List of crop options for each desired output video.
+ * @param options    (Optional) Options to control the out encode.
+ * @returns True if it succeeds, false if it fails.
+ */
+FFMULTICROP_EXPORT bool cropAndEncode(const std::string& sourceFile, const std::vector<CropOptions>& cropList,
+    const EncoderOptions& options = EncoderOptions()) noexcept;
+
+class MultiCrop;
+
+class MultiCropServer
 {
 public:
+    FFMULTICROP_EXPORT MultiCropServer() = delete;
+
+    FFMULTICROP_EXPORT ~MultiCropServer();
+
+    FFMULTICROP_EXPORT MultiCropServer(const MultiCropServer& other) = delete;
+
+    FFMULTICROP_EXPORT MultiCropServer(MultiCropServer&& other) noexcept = delete;
+
+    FFMULTICROP_EXPORT MultiCropServer& operator=(const MultiCropServer& other) = delete;
+
+    FFMULTICROP_EXPORT MultiCropServer& operator=(MultiCropServer&& other) noexcept = delete;
+
+    class ConstructorLock
+    {
+        friend class MultiCrop;
+    };
+
+    FFMULTICROP_NO_EXPORT MultiCropServer(
+        std::shared_ptr<MultiCrop>& multiCrop, std::future<bool>& future, ConstructorLock) noexcept;
+
+    enum class Status
+    {
+        Failed,
+        Running,
+        Completed
+    };
+
     /**
-     * Crops and encodes an input video into 1 or more output videos
-     * @param sourceFile Source video.
-     * @param cropList   List of crop options for each desired output video.
-     * @param options    (Optional) Options to control the out encode.
-     * @returns True if it succeeds, false if it fails.
+     * Gets the encode status.
+     * @returns The status.
      */
-    FFMULTICROP_EXPORT static bool cropAndEncode(const std::string& sourceFile,
-        const std::vector<CropOptions>& cropList, const EncoderOptions& options = EncoderOptions());
+    FFMULTICROP_EXPORT Status getStatus() noexcept;
+
+    /**
+     * Gets the encode progress.
+     * @returns The progress (normalised value between 0 and 1 inclusive).
+     */
+    FFMULTICROP_EXPORT float getProgress() noexcept;
+
+private:
+    std::shared_ptr<MultiCrop> m_multiCrop;
+    std::future<bool> m_future;
+    Status m_status = Status::Running;
 };
+
+/**
+ * Crops and encodes an input video into 1 or more output videos.
+ * @param sourceFile Source video.
+ * @param cropList   List of crop options for each desired output video.
+ * @param options    (Optional) Options to control the out encode.
+ * @returns The server object if succeeded, nullptr otherwise.
+ */
+FFMULTICROP_EXPORT std::shared_ptr<MultiCropServer> cropAndEncodeAsync(const std::string& sourceFile,
+    const std::vector<CropOptions>& cropList, const EncoderOptions& options = EncoderOptions()) noexcept;
 } // namespace Fmc
