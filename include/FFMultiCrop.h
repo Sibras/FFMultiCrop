@@ -23,14 +23,10 @@
 #include <vector>
 
 namespace Fmc {
+using DecodeType = Ffr::DecodeType;
 using EncodeType = Ffr::EncodeType;
 using EncoderOptions = Ffr::EncoderOptions;
-
-struct Resolution
-{
-    uint32_t m_width;
-    uint32_t m_height;
-};
+using Resolution = Ffr::Resolution;
 
 struct Crop
 {
@@ -82,17 +78,17 @@ class MultiCrop;
 class MultiCropServer
 {
 public:
-    FFMULTICROP_EXPORT MultiCropServer() = delete;
+    MultiCropServer() = delete;
 
     FFMULTICROP_EXPORT ~MultiCropServer();
 
-    FFMULTICROP_EXPORT MultiCropServer(const MultiCropServer& other) = delete;
+    MultiCropServer(const MultiCropServer& other) = delete;
 
-    FFMULTICROP_EXPORT MultiCropServer(MultiCropServer&& other) noexcept = delete;
+    MultiCropServer(MultiCropServer&& other) noexcept = delete;
 
-    FFMULTICROP_EXPORT MultiCropServer& operator=(const MultiCropServer& other) = delete;
+    MultiCropServer& operator=(const MultiCropServer& other) = delete;
 
-    FFMULTICROP_EXPORT MultiCropServer& operator=(MultiCropServer&& other) noexcept = delete;
+    MultiCropServer& operator=(MultiCropServer&& other) noexcept = delete;
 
     class ConstructorLock
     {

@@ -51,6 +51,9 @@ option(FFMC_BUILD_SHARED_LIBS "Build libraries as shared as opposed to static" O
 # Build test related programs?
 option(FFMC_BUILD_TESTING "Create test programs" OFF)
 
+# Build python bindings?
+option(FFMC_BUILD_PYTHON_BINDING "Create python bindigs" OFF)
+
 # Default to a release build if desired configuration is not specified.
 if(NOT CMAKE_CONFIGURATION_TYPES)
     if(NOT CMAKE_BUILD_TYPE)
@@ -188,4 +191,24 @@ if(FFMC_BUILD_TESTING)
     gtest_discover_tests(FFMCTest
         WORKING_DIRECTORY "${FfFrameReader_SOURCE_DIR}/test"
     )
+endif()
+
+# Add python bindings
+if(FFMC_BUILD_PYTHON_BINDING)
+    find_package(pybind11 REQUIRED)
+    
+    pybind11_add_module(pyMultiCrop python/FFMCPybind11.cpp)
+
+    target_include_directories(pyMultiCrop PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+        FfFrameReader/include
+        ${FfFrameReader_BINARY_DIR}
+        ${PROJECT_BINARY_DIR}
+    )
+
+    target_link_libraries(pyMultiCrop
+        PRIVATE FfMultiCrop
+    )
+
+    add_dependencies(pyMultiCrop FfMultiCrop)
 endif()
