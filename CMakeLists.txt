@@ -199,6 +199,23 @@ if(FFMC_BUILD_PYTHON_BINDING)
     
     pybind11_add_module(pyMultiCrop python/FFMCPybind11.cpp)
 
+    configure_file(python/__init__.py.in ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/pyMultiCrop/__init__.py)
+
+    configure_file(python/setup.py.in ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/setup.py)
+
+    set_target_properties(pyMultiCrop PROPERTIES
+        FRAMEWORK ON
+        SOVERSION 0
+        VERSION ${PROJECT_VERSION}
+        PREFIX ""
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/pyMultiCrop"
+    )
+
+    foreach(OUTPUTCONFIG ${CMAKE_CONFIGURATION_TYPES})
+        string(TOUPPER ${OUTPUTCONFIG} OUTPUTCONFIG)
+        set_target_properties(pyMultiCrop PROPERTIES LIBRARY_OUTPUT_DIRECTORY_${OUTPUTCONFIG} "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/pyMultiCrop")
+    endforeach()
+
     target_include_directories(pyMultiCrop PRIVATE
         ${PROJECT_SOURCE_DIR}/include
         FfFrameReader/include
@@ -208,6 +225,7 @@ if(FFMC_BUILD_PYTHON_BINDING)
 
     target_link_libraries(pyMultiCrop
         PRIVATE FfMultiCrop
+        PRIVATE FfFrameReader
     )
 
     add_dependencies(pyMultiCrop FfMultiCrop)
