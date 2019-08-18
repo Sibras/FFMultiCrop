@@ -21,10 +21,6 @@ PYBIND11_MODULE(FFMultiCrop, m)
 {
     m.doc() = "Crops and encodes an input video into 1 or more output videos";
 
-    pybind11::enum_<Fmc::DecodeType>(m, "DecodeType", "")
-        .value("Software", Fmc::DecodeType::Software)
-        .value("Cuda", Fmc::DecodeType::Cuda);
-
     pybind11::enum_<Fmc::EncodeType>(m, "EncodeType", "")
         .value("h264", Fmc::EncodeType::h264)
         .value("h265", Fmc::EncodeType::h265);
@@ -32,7 +28,6 @@ PYBIND11_MODULE(FFMultiCrop, m)
     {
         pybind11::class_<Fmc::EncoderOptions, std::shared_ptr<Fmc::EncoderOptions>> cl(m, "EncoderOptions", "");
         cl.def(pybind11::init([]() { return new Fmc::EncoderOptions(); }));
-        cl.def(pybind11::init<Fmc::DecodeType>(), pybind11::arg("type"));
         cl.def(pybind11::init([](Fmc::EncoderOptions const& o) { return new Fmc::EncoderOptions(o); }));
 
         pybind11::enum_<Fmc::EncoderOptions::Preset>(cl, "Preset", "")
