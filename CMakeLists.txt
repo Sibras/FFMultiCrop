@@ -16,30 +16,15 @@ project(FfMultiCrop
     LANGUAGES CXX
 )
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-# Build position independent code.
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
-# Disable C and C++ compiler specific extensions.
-set(CMAKE_C_EXTENSIONS OFF)
-set(CMAKE_CXX_EXTENSIONS OFF)
-
-# Setup export symbol properties
-set(CMAKE_CXX_VISIBILITY_PRESET hidden)
-set(CMAKE_VISIBILITY_INLINES_HIDDEN 1)
-
-# Defines the CMAKE_INSTALL_LIBDIR, CMAKE_INSTALL_BINDIR and many other useful macros.
-include(GNUInstallDirs)
-
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}")
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
-
-# Differentiate between release/debug builds
-if(MSVC)
-    set(CMAKE_DEBUG_POSTFIX "d")
+# Update the git submodule automatically
+find_package(Git QUIET)
+if(GIT_FOUND AND EXISTS "${PROJECT_SOURCE_DIR}/.git")
+    execute_process(COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive
+                    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                    RESULT_VARIABLE GIT_SUBMOD_RESULT)
+    if(NOT GIT_SUBMOD_RESULT EQUAL "0")
+        message(FATAL_ERROR "git submodule update --init failed with ${GIT_SUBMOD_RESULT}, please checkout submodules")
+    endif()
 endif()
 
 set(FFFR_BUILD_SHARED_LIBS OFF CACHE BOOL "Build libraries as shared as opposed to static" FORCE)
@@ -61,12 +46,6 @@ if(NOT CMAKE_CONFIGURATION_TYPES)
         set_property(CACHE CMAKE_BUILD_TYPE PROPERTY VALUE "Release")
     endif()
 endif()
-
-# Detect IPO support
-include(CheckIPOSupported)
-check_ipo_supported(RESULT BUILD_IPO OUTPUT IPO_ERROR)
-
-include(GenerateExportHeader)
 
 set(FFMC_SOURCES_EXPORT
     ${PROJECT_BINARY_DIR}/FFMCExports.h
@@ -96,19 +75,29 @@ else()
     )
 endif()
 
+include(GNUInstallDirs)
 set_target_properties(FfMultiCrop PROPERTIES
     FRAMEWORK ON
     SOVERSION 0
     VERSION ${PROJECT_VERSION}
-    PUBLIC_HEADER "${FFMC_HEADERS}"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}"
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}"
 )
 
+# Detect IPO support
+include(CheckIPOSupported)
+check_ipo_supported(RESULT BUILD_IPO OUTPUT IPO_ERROR)
 if(BUILD_IPO)
 set_target_properties(FfMultiCrop PROPERTIES
     INTERPROCEDURAL_OPTIMIZATION TRUE
 )
 endif()
 
+# Setup export symbol properties
+set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+set(CMAKE_VISIBILITY_INLINES_HIDDEN 1)
+include(GenerateExportHeader)
 generate_export_header(FfMultiCrop
     EXPORT_FILE_NAME ${FFMC_SOURCES_EXPORT}
 )
@@ -126,16 +115,14 @@ endif()
 find_path(AVUTIL_INCLUDE_DIR NAMES libavutil/avutil.h)
 find_library(AVUTIL_LIBRARY NAMES avutil)
 
-target_include_directories(FfMultiCrop PRIVATE
-    ${PROJECT_SOURCE_DIR}/include
-    ${PROJECT_BINARY_DIR}
-    ${AVUTIL_INCLUDE_DIR}
-    FfFrameReader/include
-    ${FfFrameReader_BINARY_DIR}
+target_include_directories(FfMultiCrop
+    PUBLIC ${PROJECT_SOURCE_DIR}/include
+    PUBLIC ${PROJECT_BINARY_DIR}
+    PRIVATE ${AVUTIL_INCLUDE_DIR}
 )
 target_link_libraries(FfMultiCrop
     PRIVATE ${AVUTIL_LIBRARY}
-    PRIVATE FfFrameReader
+    PUBLIC FfFrameReader
 )
 
 if("${CMAKE_INSTALL_PREFIX}" STREQUAL "")
@@ -146,10 +133,10 @@ endif()
 
 # Install targets.
 install(TARGETS FfMultiCrop
-    RUNTIME DESTINATION bin
-    LIBRARY DESTINATION lib
-    ARCHIVE DESTINATION lib
-    PUBLIC_HEADER DESTINATION include
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
 # Add tests
@@ -158,30 +145,22 @@ if(FFMC_BUILD_TESTING)
     find_package(GTest REQUIRED)
     include(GoogleTest)
 
-    set(FFMC_TEST_SOURCES
+    add_executable(FFMCTest 
         test/FFMCTest.cpp
     )
 
-    add_executable(FFMCTest ${FFMC_TEST_SOURCES})
-
     target_include_directories(FFMCTest PRIVATE
-        ${PROJECT_SOURCE_DIR}/include
-        FfFrameReader/include
         FfFrameReader/test
-        ${FfFrameReader_BINARY_DIR}
-        ${PROJECT_BINARY_DIR}
     )
 
-    target_link_libraries(
-        FFMCTest
+    target_link_libraries(FFMCTest
         PRIVATE FfMultiCrop
         PRIVATE GTest::GTest
         PRIVATE GTest::Main
         PRIVATE FfFrameReader
     )
 
-    set_target_properties(
-        FFMCTest PROPERTIES
+    set_target_properties(FFMCTest PROPERTIES
         EXCLUDE_FROM_ALL true
         VS_DEBUGGER_WORKING_DIRECTORY "${FfFrameReader_SOURCE_DIR}/test"
     )
@@ -199,29 +178,23 @@ if(FFMC_BUILD_PYTHON_BINDING)
     
     pybind11_add_module(pyMultiCrop python/FFMCPybind11.cpp)
 
-    configure_file(python/__init__.py.in ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/pyMultiCrop/__init__.py)
+    configure_file(python/__init__.py.in "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}/pyMultiCrop/__init__.py")
 
-    configure_file(python/setup.py.in ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/setup.py)
+    configure_file(python/setup.py.in "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}/setup.py")
 
     set_target_properties(pyMultiCrop PROPERTIES
         FRAMEWORK ON
         SOVERSION 0
         VERSION ${PROJECT_VERSION}
         PREFIX ""
-        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/pyMultiCrop"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}/pyMultiCrop"
     )
 
     foreach(OUTPUTCONFIG ${CMAKE_CONFIGURATION_TYPES})
         string(TOUPPER ${OUTPUTCONFIG} OUTPUTCONFIG)
-        set_target_properties(pyMultiCrop PROPERTIES LIBRARY_OUTPUT_DIRECTORY_${OUTPUTCONFIG} "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/pyMultiCrop")
+        set_target_properties(pyMultiCrop PROPERTIES
+            LIBRARY_OUTPUT_DIRECTORY_${OUTPUTCONFIG} "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}/pyMultiCrop")
     endforeach()
-
-    target_include_directories(pyMultiCrop PRIVATE
-        ${PROJECT_SOURCE_DIR}/include
-        FfFrameReader/include
-        ${FfFrameReader_BINARY_DIR}
-        ${PROJECT_BINARY_DIR}
-    )
 
     target_link_libraries(pyMultiCrop
         PRIVATE FfMultiCrop
