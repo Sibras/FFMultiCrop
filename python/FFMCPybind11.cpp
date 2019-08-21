@@ -17,7 +17,7 @@
 
 #include <pybind11/pybind11.h>
 
-PYBIND11_MODULE(FFMultiCrop, m)
+PYBIND11_MODULE(pyMultiCrop, m)
 {
     m.doc() = "Crops and encodes an input video into 1 or more output videos";
 
