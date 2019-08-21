@@ -115,7 +115,7 @@ PYBIND11_MODULE(pyMultiCrop, m)
     m.def("cropAndEncodeAsync",
         static_cast<std::shared_ptr<Fmc::MultiCropServer> (*)(const std::string&,
             const std::vector<class Fmc::CropOptions>&, const Fmc::EncoderOptions&)>(&Fmc::cropAndEncodeAsync),
-        "Crops and encodes an input video into 1 or more output videos synchronously.",
+        "Crops and encodes an input video into 1 or more output videos asynchronously.",
         pybind11::return_value_policy::automatic, pybind11::arg("sourceFile"), pybind11::arg("cropList"),
         pybind11::arg_v("options", Fmc::EncoderOptions(), "EncoderOptions()"));
 }
