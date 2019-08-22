@@ -180,9 +180,9 @@ public:
                     } else {
                         cropRight = m_stream->getWidth() - cropRight;
                     }
-                    if (cropTop != crop.m_left || cropLeft != crop.m_left) {
+                    if (cropTop != crop.m_top || cropLeft != crop.m_left) {
                         Ffr::log("Out of range crop values detected, crop has been clamped for frame: "s +
-                                to_string(current),
+                                to_string(newFrame->getFrameNumber()),
                             Ffr::LogLevel::Warning);
                     }
 
