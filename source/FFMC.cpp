@@ -67,6 +67,12 @@ public:
             return nullptr;
         }
 
+        // Auto calculate ideal number of threads
+        auto numThreads = options.m_numThreads;
+        if (numThreads == 0) {
+            numThreads = static_cast<uint32_t>(std::thread::hardware_concurrency() / cropList.size());
+        }
+
         // Create output encoders for each crop sequence
         int64_t longestFrames = 0;
         vector<shared_ptr<Ffr::Encoder>> encoders;
@@ -111,7 +117,7 @@ public:
                 i.m_resolution.m_height, Ffr::getRational(Ffr::StreamUtils::getSampleAspectRatio(stream.get())),
                 stream->getPixelFormat(), Ffr::getRational(Ffr::StreamUtils::getFrameRate(stream.get())),
                 stream->frameToTime(i.m_cropList.size()), options.m_type, options.m_quality, options.m_preset,
-                options.m_gopSize, Ffr::Encoder::ConstructorLock()));
+                numThreads, options.m_gopSize, Ffr::Encoder::ConstructorLock()));
             if (!encoders.back()->isEncoderValid()) {
                 return nullptr;
             }
