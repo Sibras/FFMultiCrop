@@ -26,7 +26,7 @@ struct TestParamsEncode
     std::vector<CropOptions> m_cropList;
 };
 
-static CropOptions s_options1 = {{{0, 0}, {0, 1}}, {60, 40}, "test-mc-1.mkv"};
+static CropOptions s_options1 = {{{0, 0}, {0, 1}}, {640, 480}, "test-mc-1.mkv"};
 
 static std::vector<TestParamsEncode> g_testDataEncode = {
     {0, {s_options1}},
@@ -46,19 +46,22 @@ protected:
         int32_t directionX = 1;
         int32_t directionY = 1;
         int32_t x = 0, y = 0;
+        // Set width/height offset to create out of bounds values that will need to be clamped
+        const int32_t width = GetParam().m_cropList[0].m_resolution.m_width / 2;
+        const int32_t height = GetParam().m_cropList[0].m_resolution.m_height / 2;
         for (auto& j : m_cropOps) {
             for (int32_t i = 0; i < 1000; ++i) {
-                if (x >= 1920 || x < 0) {
+                if (x >= (1920 - width) || x < (0 - width)) {
                     directionX *= -1;
-                    x += 2 * directionX;
+                    x += 10 * directionX;
                 }
-                if (y >= 1080 || y < 0) {
+                if (y >= (1080 - height) || y < (0 - height)) {
                     directionY *= -1;
                     --y;
                 }
-                j.m_cropList.emplace_back(Crop({static_cast<uint32_t>(x), static_cast<uint32_t>(y)}));
+                j.m_cropList.emplace_back(Crop({static_cast<uint32_t>(y), static_cast<uint32_t>(x)}));
                 y += directionY;
-                x += 2 * directionX;
+                x += 10 * directionX;
             }
         }
     }

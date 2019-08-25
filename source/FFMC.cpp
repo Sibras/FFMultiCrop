@@ -24,7 +24,10 @@
 #include <utility>
 
 extern "C" {
+#include <libavcodec/avcodec.h>
 #include <libavutil/frame.h>
+#include <libavutil/imgutils.h>
+#include <libavutil/pixdesc.h>
 }
 
 using namespace std;
@@ -187,11 +190,38 @@ public:
                     }
 
                     // Apply crop settings
-                    newFrame->m_frame->crop_top = cropTop;
-                    newFrame->m_frame->crop_bottom = cropBottom;
-                    newFrame->m_frame->crop_left = cropLeft;
-                    newFrame->m_frame->crop_right = cropRight;
+                    const AVPixFmtDescriptor* desc = av_pix_fmt_desc_get(newFrame->m_codecContext->pix_fmt);
+                    if (desc->flags & AV_PIX_FMT_FLAG_HWACCEL) {
+                        newFrame->m_frame->crop_top += cropTop;
+                        newFrame->m_frame->crop_bottom = cropBottom - newFrame->m_frame->crop_bottom;
+                        newFrame->m_frame->crop_left += cropLeft;
+                        newFrame->m_frame->crop_right = cropRight - newFrame->m_frame->crop_right;
+                    } else {
+                        int32_t maxStep[4];
+                        av_image_fill_max_pixsteps(maxStep, nullptr, desc);
 
+                        newFrame->m_frame->width = m_cropList[current].m_resolution.m_width;
+                        newFrame->m_frame->height = m_cropList[current].m_resolution.m_height;
+
+                        newFrame->m_frame->data[0] += cropTop * newFrame->m_frame->linesize[0];
+                        newFrame->m_frame->data[0] += cropLeft * maxStep[0];
+
+                        if (!(desc->flags & AV_PIX_FMT_FLAG_PAL || desc->flags & AV_PIX_FMT_FLAG_PSEUDOPAL)) {
+                            for (uint32_t j = 1; j < 3; j++) {
+                                if (newFrame->m_frame->data[j]) {
+                                    newFrame->m_frame->data[j] +=
+                                        (cropTop >> desc->log2_chroma_h) * newFrame->m_frame->linesize[j];
+                                    newFrame->m_frame->data[j] += (cropLeft * maxStep[j]) >> desc->log2_chroma_w;
+                                }
+                            }
+                        }
+
+                        // Alpha plane must be treated separately
+                        if (newFrame->m_frame->data[3]) {
+                            newFrame->m_frame->data[3] += cropTop * newFrame->m_frame->linesize[3];
+                            newFrame->m_frame->data[3] += cropLeft * maxStep[3];
+                        }
+                    }
                     // Encode new frame
                     if (!i->encodeFrame(newFrame)) {
                         return false;
