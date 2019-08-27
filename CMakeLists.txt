@@ -37,7 +37,7 @@ option(FFMC_BUILD_SHARED_LIBS "Build libraries as shared as opposed to static" O
 option(FFMC_BUILD_TESTING "Create test programs" OFF)
 
 # Build python bindings?
-option(FFMC_BUILD_PYTHON_BINDING "Create python bindigs" OFF)
+option(FFMC_BUILD_PYTHON_BINDING "Create python bindings" OFF)
 
 # Default to a release build if desired configuration is not specified.
 if(NOT CMAKE_CONFIGURATION_TYPES)
@@ -173,10 +173,13 @@ if(FFMC_BUILD_TESTING)
 endif()
 
 # Add python bindings
-if(FFMC_BUILD_PYTHON_BINDING)
+if(FFMC_BUILD_PYTHON_BINDING)    
     find_package(pybind11 REQUIRED)
     
-    pybind11_add_module(pyMultiCrop python/FFMCPybind11.cpp)
+    pybind11_add_module(pyMultiCrop
+        python/FFMCPybind11.cpp
+        FFFrameReader/python/FFFRPybind11.cpp
+    )
 
     configure_file(python/__init__.py.in "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}/pyMultiCrop/__init__.py")
 
