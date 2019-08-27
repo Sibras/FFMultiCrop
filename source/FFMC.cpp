@@ -83,8 +83,8 @@ public:
             numThreads = static_cast<uint32_t>(std::thread::hardware_concurrency() / cropList.size());
         }
 
-        // Create output encoders for each crop sequence
         int64_t longestFrames = 0;
+        int64_t startFrame = 0;
         vector<EncoderParams> encoders;
         for (auto& i : cropList) {
             // Validate the input crop sequence
@@ -96,6 +96,7 @@ public:
                 Ffr::log("Crop list contains more frames than are found in input stream"s, Ffr::LogLevel::Error);
                 return nullptr;
             }
+            // Validate the input skip sequence
             size_t skipFrames = 0;
             for (const auto& j : i.m_skipRegions) {
                 if (j.second < j.first) {
@@ -111,8 +112,14 @@ public:
                         to_string(j.first) += ", "s += to_string(j.second) += ")."s,
                         Ffr::LogLevel::Warning);
                 }
+                // Calculate total number of frames that will be skipped
                 skipFrames += j.second - j.first;
+                // Check if skipping start frames
+                if (j.first <= 0) {
+                    startFrame = std::min(startFrame, static_cast<int64_t>(j.second));
+                }
             }
+            // Check total number of cropped/skipped frames
             int64_t totalFrames = skipFrames + i.m_cropList.size();
             if (totalFrames > stream->getTotalFrames()) {
                 Ffr::log(
@@ -121,6 +128,10 @@ public:
                 totalFrames = stream->getTotalFrames();
             }
             longestFrames = std::max(longestFrames, totalFrames);
+            // Seek to start crop region
+            if (startFrame > stream->peekNextFrame()->getFrameNumber()) {
+                stream->seekFrame(startFrame);
+            }
             // Create the new encoder
             auto encoder = make_shared<Ffr::Encoder>(i.m_fileName, i.m_resolution.m_width, i.m_resolution.m_height,
                 Ffr::getRational(Ffr::StreamUtils::getSampleAspectRatio(stream.get())), stream->getPixelFormat(),
