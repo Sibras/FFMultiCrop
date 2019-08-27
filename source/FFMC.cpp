@@ -36,7 +36,7 @@ namespace Fmc {
 class MultiCrop
 {
 public:
-    std::shared_ptr<Ffr::Stream> m_stream;
+    shared_ptr<Stream> m_stream;
 
     class EncoderParams
     {
@@ -51,7 +51,7 @@ public:
         int64_t m_lastValidTime = -1;
     };
 
-    std::vector<EncoderParams> m_encoders;
+    vector<EncoderParams> m_encoders;
     int64_t m_currentFrame = 0;
     int64_t m_lastFrame;
 
@@ -62,21 +62,27 @@ public:
      * @param          lastFrame The last frame required by all output encoders.
      */
     FFFRAMEREADER_NO_EXPORT MultiCrop(
-        std::shared_ptr<Ffr::Stream>& stream, std::vector<EncoderParams>& encoders, const int64_t lastFrame) noexcept
+        shared_ptr<Stream> stream, vector<EncoderParams>& encoders, const int64_t lastFrame) noexcept
         : m_stream(move(stream))
         , m_encoders(move(encoders))
         , m_lastFrame(lastFrame)
     {}
 
-    FFFRAMEREADER_NO_EXPORT static std::shared_ptr<MultiCrop> getMultiCrop(const std::string& sourceFile,
-        const std::vector<CropOptions>& cropList, const EncoderOptions& options = EncoderOptions()) noexcept
+    FFFRAMEREADER_NO_EXPORT static shared_ptr<MultiCrop> getMultiCrop(const string& sourceFile,
+        const vector<CropOptions>& cropList, const EncoderOptions& options = EncoderOptions()) noexcept
     {
         // Try and open source video
-        auto stream = Ffr::Stream::getStream(sourceFile);
+        const auto stream = Ffr::Stream::getStream(sourceFile);
         if (stream == nullptr) {
             return nullptr;
         }
 
+        return getMultiCrop(stream, cropList, options);
+    }
+
+    FFFRAMEREADER_NO_EXPORT static std::shared_ptr<MultiCrop> getMultiCrop(const std::shared_ptr<Stream>& stream,
+        const std::vector<CropOptions>& cropList, const EncoderOptions& options = EncoderOptions()) noexcept
+    {
         // Auto calculate ideal number of threads
         auto numThreads = options.m_numThreads;
         if (numThreads == 0) {
@@ -308,6 +314,20 @@ bool cropAndEncode(
     return multiCrop->encodeLoop();
 }
 
+bool cropAndEncode(
+    const shared_ptr<Stream>& stream, const vector<CropOptions>& cropList, const EncoderOptions& options) noexcept
+{
+    if (stream->peekNextFrame()->getFrameNumber() != 0) {
+        // Ensure stream is at the start
+        stream->seek(0);
+    }
+    const auto multiCrop(MultiCrop::getMultiCrop(stream, cropList, options));
+    if (multiCrop == nullptr) {
+        return false;
+    }
+    return multiCrop->encodeLoop();
+}
+
 MultiCropServer::~MultiCropServer()
 {
     if (m_future.valid()) {
@@ -315,8 +335,7 @@ MultiCropServer::~MultiCropServer()
     }
 }
 
-MultiCropServer::MultiCropServer(
-    std::shared_ptr<MultiCrop>& multiCrop, std::future<bool>& future, ConstructorLock) noexcept
+MultiCropServer::MultiCropServer(shared_ptr<MultiCrop>& multiCrop, future<bool>& future, ConstructorLock) noexcept
     : m_multiCrop(move(multiCrop))
     , m_future(move(future))
 {}
@@ -343,10 +362,28 @@ float MultiCropServer::getProgress() noexcept
     return m_multiCrop->getProgress();
 }
 
-std::shared_ptr<MultiCropServer> cropAndEncodeAsync(
-    const std::string& sourceFile, const std::vector<CropOptions>& cropList, const EncoderOptions& options) noexcept
+shared_ptr<MultiCropServer> cropAndEncodeAsync(
+    const string& sourceFile, const vector<CropOptions>& cropList, const EncoderOptions& options) noexcept
 {
     auto multiCrop(MultiCrop::getMultiCrop(sourceFile, cropList, options));
+    if (multiCrop == nullptr) {
+        return nullptr;
+    }
+    auto future(async(launch::async, &MultiCrop::encodeLoop, multiCrop));
+    if (!future.valid()) {
+        return nullptr;
+    }
+    return make_shared<MultiCropServer>(multiCrop, future, MultiCropServer::ConstructorLock());
+}
+
+shared_ptr<MultiCropServer> cropAndEncodeAsync(
+    const shared_ptr<Stream>& stream, const vector<CropOptions>& cropList, const EncoderOptions& options) noexcept
+{
+    if (stream->peekNextFrame()->getFrameNumber() != 0) {
+        // Ensure stream is at the start
+        stream->seek(0);
+    }
+    auto multiCrop(MultiCrop::getMultiCrop(stream, cropList, options));
     if (multiCrop == nullptr) {
         return nullptr;
     }

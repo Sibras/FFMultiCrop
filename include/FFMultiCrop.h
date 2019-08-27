@@ -15,7 +15,7 @@
  */
 #pragma once
 
-#include "FFFRTypes.h"
+#include "FFFRStream.h"
 #include "FFMCExports.h"
 
 #include <future>
@@ -27,6 +27,7 @@ using DecodeType = Ffr::DecodeType;
 using EncodeType = Ffr::EncodeType;
 using EncoderOptions = Ffr::EncoderOptions;
 using Resolution = Ffr::Resolution;
+using Stream = Ffr::Stream;
 
 struct Crop
 {
@@ -71,6 +72,16 @@ public:
  * @returns True if it succeeds, false if it fails.
  */
 FFMULTICROP_EXPORT bool cropAndEncode(const std::string& sourceFile, const std::vector<CropOptions>& cropList,
+    const EncoderOptions& options = EncoderOptions()) noexcept;
+
+/**
+ * Crops and encodes an input stream into 1 or more output videos synchronously.
+ * @param stream   Source video stream.
+ * @param cropList List of crop options for each desired output video.
+ * @param options  (Optional) Options to control the out encode.
+ * @returns True if it succeeds, false if it fails.
+ */
+FFMULTICROP_EXPORT bool cropAndEncode(const std::shared_ptr<Stream>& stream, const std::vector<CropOptions>& cropList,
     const EncoderOptions& options = EncoderOptions()) noexcept;
 
 class MultiCrop;
@@ -131,5 +142,15 @@ private:
  * @returns The server object if succeeded, nullptr otherwise.
  */
 FFMULTICROP_EXPORT std::shared_ptr<MultiCropServer> cropAndEncodeAsync(const std::string& sourceFile,
+    const std::vector<CropOptions>& cropList, const EncoderOptions& options = EncoderOptions()) noexcept;
+
+/**
+ * Crops and encodes an input stream into 1 or more output videos.
+ * @param stream   Source video stream.
+ * @param cropList List of crop options for each desired output video.
+ * @param options  (Optional) Options to control the out encode.
+ * @returns The server object if succeeded, nullptr otherwise.
+ */
+FFMULTICROP_EXPORT std::shared_ptr<MultiCropServer> cropAndEncodeAsync(const std::shared_ptr<Stream>& stream,
     const std::vector<CropOptions>& cropList, const EncoderOptions& options = EncoderOptions()) noexcept;
 } // namespace Fmc
