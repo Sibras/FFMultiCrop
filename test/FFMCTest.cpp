@@ -28,9 +28,12 @@ struct TestParamsEncode
 
 static CropOptions s_options1 = {{{0, 0}, {0, 1}}, {640, 480}, "test-mc-1.mkv"};
 static CropOptions s_options2 = {{{0, 0}, {0, 1}}, {480, 640}, "test-mc-2.mkv"};
+static CropOptions s_options3 = {
+    {{0, 0}, {0, 1}}, {640, 480}, "test-mc-3.mkv", {std::make_pair(0ULL, 250ULL), std::make_pair(500ULL, 750ULL)}};
 
 static std::vector<TestParamsEncode> g_testDataEncode = {
     {0, {s_options1, s_options2}},
+    {0, {s_options3}},
 };
 
 class EncodeTest1 : public ::testing::TestWithParam<TestParamsEncode>
