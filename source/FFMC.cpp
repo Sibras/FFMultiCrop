@@ -282,7 +282,7 @@ public:
     }
 };
 
-Crop CropOptions::getCrop(const uint64_t frame) const noexcept
+CropPosition CropOptions::getCrop(const uint64_t frame) const noexcept
 {
     // Check if frame is in skip region
     bool skip = false;

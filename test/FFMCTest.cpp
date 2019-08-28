@@ -67,7 +67,7 @@ protected:
                     y += yMod * directionY;
                 }
                 j.m_cropList.emplace_back(
-                    Crop({static_cast<uint32_t>(std::max(y, 0)), static_cast<uint32_t>(std::max(x, 0))}));
+                    CropPosition({static_cast<uint32_t>(std::max(y, 0)), static_cast<uint32_t>(std::max(x, 0))}));
                 y += yMod * directionY;
                 x += xMod * directionX;
             }
