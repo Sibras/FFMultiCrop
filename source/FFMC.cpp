@@ -86,7 +86,7 @@ public:
         // Auto calculate ideal number of threads
         auto numThreads = options.m_numThreads;
         if (numThreads == 0) {
-            numThreads = static_cast<uint32_t>(std::thread::hardware_concurrency() / cropList.size());
+            numThreads = std::max(static_cast<uint32_t>(std::thread::hardware_concurrency() / cropList.size()), 2U);
         }
 
         int64_t longestFrames = 0;
