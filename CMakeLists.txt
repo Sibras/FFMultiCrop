@@ -157,13 +157,17 @@ if(FFMC_BUILD_TESTING)
     set_target_properties(FFMCTest PROPERTIES
         EXCLUDE_FROM_ALL true
         VS_DEBUGGER_WORKING_DIRECTORY "${FfFrameReader_SOURCE_DIR}/test"
+        VERSION ${PROJECT_VERSION}
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}"
+        ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}"
     )
 
     # Enable all compile warnings
     if(MSVC)
-      target_compile_options(FfMultiCrop PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/W4 /WX /experimental:external /external:anglebrackets /external:W3>)
+        target_compile_options(FfMultiCrop PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/W4 /WX /experimental:external /external:anglebrackets /external:W3>)
     else()
-      target_compile_options(FfMultiCrop PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -pedantic -Werror>)
+        target_compile_options(FfMultiCrop PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -pedantic -Werror>)
     endif()
 
     add_dependencies(FFMCTest FfMultiCrop)
