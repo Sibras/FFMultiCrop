@@ -28,6 +28,7 @@ if(GIT_FOUND AND EXISTS "${PROJECT_SOURCE_DIR}/.git")
 endif()
 
 set(FFFR_BUILD_SHARED_LIBS OFF CACHE BOOL "Build libraries as shared as opposed to static" FORCE)
+set(FFFR_BUILD_CUDA OFF CACHE BOOL "Build using NVIDIA cuda support" FORCE)
 add_subdirectory(FFFrameReader)
 
 # Shared/Dynamic or Static library?
@@ -104,13 +105,6 @@ generate_export_header(FfMultiCrop
 
 add_dependencies(FfMultiCrop FfFrameReader)
 
-# Enable all compile warnings
-if(MSVC)
-  target_compile_options(FfMultiCrop PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/W4 /WX /experimental:external /external:anglebrackets /external:W3>)
-else()
-  target_compile_options(FfMultiCrop PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -pedantic -Werror>)
-endif()
-
 # Find the required FFmpeg libraries
 find_path(AVUTIL_INCLUDE_DIR NAMES libavutil/avutil.h)
 find_library(AVUTIL_LIBRARY NAMES avutil)
@@ -164,6 +158,13 @@ if(FFMC_BUILD_TESTING)
         EXCLUDE_FROM_ALL true
         VS_DEBUGGER_WORKING_DIRECTORY "${FfFrameReader_SOURCE_DIR}/test"
     )
+
+    # Enable all compile warnings
+    if(MSVC)
+      target_compile_options(FfMultiCrop PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/W4 /WX /experimental:external /external:anglebrackets /external:W3>)
+    else()
+      target_compile_options(FfMultiCrop PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -pedantic -Werror>)
+    endif()
 
     add_dependencies(FFMCTest FfMultiCrop)
 
