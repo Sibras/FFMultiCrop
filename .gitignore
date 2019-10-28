@@ -30,3 +30,24 @@
 *.exe
 *.out
 *.app
+
+# Build folders
+.vs/
+build/
+install/
+
+# Video files
+*.mp4
+*.m4v
+*.mkv
+*.avi
+*.mxf
+*.MP4
+*.AVI
+*.MXF
+
+# Image files
+*.jpg
+*.bmp
+*.png
+*.ppm
