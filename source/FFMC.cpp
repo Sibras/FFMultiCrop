@@ -48,7 +48,7 @@ public:
 
         shared_ptr<Ffr::Encoder> m_encoder = nullptr;
         CropOptions m_cropList;
-        int64_t m_lastValidTime = -1;
+        int64_t m_lastValidTime = INT64_MIN;
     };
 
     vector<EncoderParams> m_encoders;
@@ -256,7 +256,7 @@ public:
                     }
 
                     // Correct timestamp in case of skip regions
-                    const int64_t timeStamp = (i.m_lastValidTime >= 0) ?
+                    const int64_t timeStamp = (i.m_lastValidTime != INT64_MIN) ?
                         i.m_lastValidTime + (frame->m_frame->best_effort_timestamp - lastTime) :
                         0;
                     newFrame->m_frame->best_effort_timestamp = timeStamp;
