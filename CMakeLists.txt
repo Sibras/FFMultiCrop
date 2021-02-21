@@ -144,7 +144,7 @@ if(FFMC_BUILD_TESTING)
     )
 
     target_include_directories(FFMCTest PRIVATE
-        FfFrameReader/test
+        "${FfFrameReader_SOURCE_DIR}/test"
     )
 
     target_link_libraries(FFMCTest
